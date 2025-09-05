@@ -1,0 +1,15 @@
+{
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "edge"
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/salvato_auction_list",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
+
+
