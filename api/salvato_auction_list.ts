@@ -99,7 +99,6 @@ type SalvatoAuctionLot = {
 
 
 async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoTokenResBody> {
-    console.log(`Fetching Salvato token from ${apiUrl}`)
     const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -113,12 +112,10 @@ async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoTokenResBody> {
     }
 
     const data = (await response.json()) as SalvatoTokenResBody
-    console.log(`Salvato token fetched: ${data.token}`)
     return data
 }
 
 async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promise<SalvatoAuctionResBody> {
-    console.log(`Fetching Salvato auction list from ${apiUrl}`)
     const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
@@ -136,7 +133,6 @@ async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promis
 }
 
 async function fetchSalvatoAuctionLotList(apiUrl: string, apiToken: string): Promise<SalvatoAuctionLotResBody> {
-    console.log(`Fetching Salvato auction lot list from ${apiUrl}`)
     let allLots: SalvatoAuctionLot[] = []
     let offset = 0
     let hasMore = true
@@ -184,18 +180,12 @@ async function transformAuctionList(auctionList: SalvatoAuctionLot[]): Promise<P
         auctionEndDate: endDate,
     }
 
-    console.log(`Auction list transformed: ${payload.vehicle.length} vehicles`)
     return payload
 }
 
 
 
 export default async function handler(request: Request): Promise<Response> {
-    console.log('Plumsail API Key: ', process.env.PLUMSAIL_API_KEY)
-    console.log('Plumsail API URL: ', process.env.PLUMSAIL_API_URL)
-    console.log('Salvato API URL: ', process.env.SALVATO_PRODUCTION_URL)
-    console.log('Salvato Client ID: ', process.env.SALVATO_CLIENT_ID)
-    console.log('Salvato Client Secret: ', process.env.SALVATO_CLIENT_SECRET)
   try {
     const token = await fetchSalvatoToken(`${process.env.SALVATO_PRODUCTION_URL}/auth/token`)
     const auctionList = await fetchSalvatoAuctionList(`${process.env.SALVATO_PRODUCTION_URL}/auctions`, token.token)
@@ -204,18 +194,14 @@ export default async function handler(request: Request): Promise<Response> {
     for (const auction of auctionList.data) {
         if (auction.status === 'COMING_SOON') {
             const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_PRODUCTION_URL}/auctions/${auction.auctionId}/lots`, token.token)
-            console.log(`Salvato auction lot list fetched: ${auctionLotList.data.length} lots`)
             lotsByAuction.set(String(auction.auctionId), auctionLotList.data)
         } else if (auction.status === 'IN_PROGRESS') {
             const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_PRODUCTION_URL}/auctions/${auction.auctionId}/lots`, token.token)
-            console.log(`Salvato auction lot list fetched: ${auctionLotList.data.length} lots`)
             lotsByAuction.set(String(auction.auctionId), auctionLotList.data)
             continue;
         } else if (auction.status === 'COMPLETED') {
-            console.log(`Skipping completed auction: ${auction.auctionId}`)
             continue;
         } else if (auction.status === 'CANCELLED') {
-            console.log(`Skipping cancelled auction: ${auction.auctionId}`)
             continue;
         }
     }
@@ -223,7 +209,6 @@ export default async function handler(request: Request): Promise<Response> {
     const payloads: PlumsailAuctionVehicleRequest[] = []
     for (const [, lots] of lotsByAuction.entries()) {
         const payload = await transformAuctionList(lots)
-        console.log(`Auction list transformed: ${payload.vehicle.length} vehicles`)
         payloads.push(payload)
     }
 
@@ -243,7 +228,6 @@ export default async function handler(request: Request): Promise<Response> {
       throw new Error(`Plumsail API failed: ${firstError.status}`)
     }
     const plumsailData = await Promise.all(plumsailResponses.map(r => r.json()))
-    console.log(`Plumsail data fetched: ${plumsailData.length} auctions`)
 
     return new Response(
       JSON.stringify({
