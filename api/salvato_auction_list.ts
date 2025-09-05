@@ -2,11 +2,6 @@ export const config = {
   runtime: 'edge',
 }
 
-type SalvatoTokenReqBody = {
-    clientId: string,
-    clientSecret: string,
-}
-
 type SalvatoTokenResBody = {
     token: string,
     expiresIn: number,
@@ -21,9 +16,14 @@ type SalvatoAuction = {
 }
 
 type SalvatoAuctionResBody = {
-    auctions: SalvatoAuction[],
-    total: number,
-}
+    data: SalvatoAuction[];
+    pagination: {
+      limit: number;
+      offset: number;
+      total: number;
+    };
+  };
+  
 
 type SalvatoAuctionLot = {
     id: number
@@ -95,16 +95,13 @@ type SalvatoAuctionLot = {
   
   type SalvatoAuctionLotResBody = {
     data: SalvatoAuctionLot[]
-    pagination: {
-      limit: number
-      offset: number
-      total: number
-    }
   }
 
 
 async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoTokenResBody> {
+    console.log(`Fetching Salvato token from ${apiUrl}`)
     const response = await fetch(apiUrl, {
+        method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
@@ -116,11 +113,14 @@ async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoTokenResBody> {
     }
 
     const data = (await response.json()) as SalvatoTokenResBody
+    console.log(`Salvato token fetched: ${data.token}`)
     return data
 }
 
 async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promise<SalvatoAuctionResBody> {
+    console.log(`Fetching Salvato auction list from ${apiUrl}`)
     const response = await fetch(apiUrl, {
+        method: 'GET',
         headers: {
             Authorization: `Bearer ${apiToken}`,
             'Content-Type': 'application/json',
@@ -136,19 +136,34 @@ async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promis
 }
 
 async function fetchSalvatoAuctionLotList(apiUrl: string, apiToken: string): Promise<SalvatoAuctionLotResBody> {
-    const response = await fetch(apiUrl, {
-        headers: {
-            Authorization: `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-        },
-    })
+    console.log(`Fetching Salvato auction lot list from ${apiUrl}`)
+    let allLots: SalvatoAuctionLot[] = []
+    let offset = 0
+    let hasMore = true
+    const limit = 10 // Assuming API default or max limit
 
-    if (!response.ok) {
-        throw new Error(`Salvato API failed: ${response.status}`)
+    while (hasMore) {
+        const response = await fetch(`${apiUrl}?offset=${offset}&limit=${limit}`, {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${apiToken}`,
+                'Content-Type': 'application/json',
+            },
+        })
+
+        if (!response.ok) {
+            throw new Error(`Salvato API failed: ${response.status}`)
+        }
+
+        const data = (await response.json())
+        allLots.push(...data.data as SalvatoAuctionLot[])
+        offset += limit
+        hasMore = data.pagination.total > allLots.length
     }
 
-    const data = (await response.json()) as SalvatoAuctionLotResBody
-    return data
+    return {
+        data: allLots as SalvatoAuctionLot[],
+    }
 }
 
 async function transformAuctionList(auctionList: SalvatoAuctionLot[]): Promise<PlumsailAuctionVehicleRequest> {
@@ -169,27 +184,38 @@ async function transformAuctionList(auctionList: SalvatoAuctionLot[]): Promise<P
         auctionEndDate: endDate,
     }
 
+    console.log(`Auction list transformed: ${payload.vehicle.length} vehicles`)
     return payload
 }
 
 
 
 export default async function handler(request: Request): Promise<Response> {
+    console.log('Plumsail API Key: ', process.env.PLUMSAIL_API_KEY)
+    console.log('Plumsail API URL: ', process.env.PLUMSAIL_API_URL)
+    console.log('Salvato API URL: ', process.env.SALVATO_PRODUCTION_URL)
+    console.log('Salvato Client ID: ', process.env.SALVATO_CLIENT_ID)
+    console.log('Salvato Client Secret: ', process.env.SALVATO_CLIENT_SECRET)
   try {
-
-    const token = await fetchSalvatoToken(`${process.env.SALVATO_STAGING_URL}/token`)
-    const auctionList = await fetchSalvatoAuctionList(`${process.env.SALVATO_STAGING_URL}/auctions`, token.token)
+    const token = await fetchSalvatoToken(`${process.env.SALVATO_PRODUCTION_URL}/auth/token`)
+    const auctionList = await fetchSalvatoAuctionList(`${process.env.SALVATO_PRODUCTION_URL}/auctions`, token.token)
     
     const lotsByAuction = new Map<string, SalvatoAuctionLot[]>();
-    for (const auction of auctionList.auctions) {
+    for (const auction of auctionList.data) {
         if (auction.status === 'COMING_SOON') {
-            const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_STAGING_URL}/auctions/${auction.auctionId}/lots`, token.token)
+            const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_PRODUCTION_URL}/auctions/${auction.auctionId}/lots`, token.token)
+            console.log(`Salvato auction lot list fetched: ${auctionLotList.data.length} lots`)
             lotsByAuction.set(String(auction.auctionId), auctionLotList.data)
         } else if (auction.status === 'IN_PROGRESS') {
+            const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_PRODUCTION_URL}/auctions/${auction.auctionId}/lots`, token.token)
+            console.log(`Salvato auction lot list fetched: ${auctionLotList.data.length} lots`)
+            lotsByAuction.set(String(auction.auctionId), auctionLotList.data)
             continue;
         } else if (auction.status === 'COMPLETED') {
+            console.log(`Skipping completed auction: ${auction.auctionId}`)
             continue;
         } else if (auction.status === 'CANCELLED') {
+            console.log(`Skipping cancelled auction: ${auction.auctionId}`)
             continue;
         }
     }
@@ -197,6 +223,7 @@ export default async function handler(request: Request): Promise<Response> {
     const payloads: PlumsailAuctionVehicleRequest[] = []
     for (const [, lots] of lotsByAuction.entries()) {
         const payload = await transformAuctionList(lots)
+        console.log(`Auction list transformed: ${payload.vehicle.length} vehicles`)
         payloads.push(payload)
     }
 
@@ -206,6 +233,7 @@ export default async function handler(request: Request): Promise<Response> {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `${process.env.PLUMSAIL_API_KEY}`,
         },
         body: JSON.stringify(payload),
       })
@@ -215,7 +243,7 @@ export default async function handler(request: Request): Promise<Response> {
       throw new Error(`Plumsail API failed: ${firstError.status}`)
     }
     const plumsailData = await Promise.all(plumsailResponses.map(r => r.json()))
-    console.log(plumsailData)
+    console.log(`Plumsail data fetched: ${plumsailData.length} auctions`)
 
     return new Response(
       JSON.stringify({
