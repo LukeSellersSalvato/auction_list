@@ -1,104 +1,10 @@
+import { createAuctionPdfFromData } from "@/functions/auction-pdf-pipe";
+
 export const config = {
   runtime: 'edge',
 }
 
-type SalvatoTokenResBody = {
-    token: string,
-    expiresIn: number,
-}
-
-type SalvatoAuction = {
-    auctionId: string,
-    name: string,
-    createdAt: string,
-    updatedAt: string,
-    status: string,
-}
-
-type SalvatoAuctionResBody = {
-    data: SalvatoAuction[];
-    pagination: {
-      limit: number;
-      offset: number;
-      total: number;
-    };
-  };
-  
-
-type SalvatoAuctionLot = {
-    id: number
-    lotUrl: string
-    auctionId: number
-    status: 'IN_PROGRESS' | 'COMING_SOON' | 'COMPLETED' | 'CANCELLED'
-    startDate: string
-    endDate: string
-    zipCode: string
-    state: string
-    city: string
-    currentPrice: number
-    vin: string
-    year: number
-    make: string
-    model: string
-    color: string
-    odometerReading: number
-    odometerReadingType: 'ACTUAL' | 'EXEMPT' | 'NOT_ACTUAL'
-    actualCashValue: number
-    estimatedCostOfRepair: number
-    titleBrands: string[]
-    title: {
-      brand: string
-      name: string
-      description: string
-    }
-    transmissionStyle: 'AUTOMATIC' | 'MANUAL' | 'CVT'
-    driveType: 'FWD' | 'RWD' | 'AWD' | '4WD'
-    fuelType: 'GASOLINE' | 'DIESEL' | 'ELECTRIC' | 'HYBRID'
-    engineHp: number
-    engineNumberOfCylinders: number
-    engineDisplacementLiters: number
-    airbagsDeployed: 'YES' | 'NO' | 'UNKNOWN'
-    startCode: 'RUNS_AND_DRIVES' | 'RUNS_BUT_NEEDS_REPAIR' | 'WILL_NOT_START'
-    hasKeys: 'YES' | 'NO' | 'UNKNOWN'
-    damageType: 'COLLISION_IMPACT' | 'FIRE' | 'FLOOD' | 'HAIL' | 'THEFT'
-    primaryDamage: 'FRONT' | 'REAR' | 'LEFT' | 'RIGHT' | 'TOP' | 'UNDERCARRIAGE'
-    secondaryDamage: string
-    lotImagesDetails: {
-      imgCount: number
-      lotImages: {
-        sequence: number
-        category: string
-        link: {
-          url: string
-          isThumbNail: boolean
-          isHdImage: boolean
-        }[]
-      }[]
-    }
-    videoURL?: string
-  }
-
-  type PlumsailAuctionVehicleObject = {
-    lotId: number;
-    make: string;
-    model: string;
-    year: number;
-    urlLink: string;
-  }
-  
-  // Type for the full request payload
-  type PlumsailAuctionVehicleRequest = {
-    vehicle: PlumsailAuctionVehicleObject[];
-    auctionStartDate: string;
-    auctionEndDate: string;
-  }
-  
-  type SalvatoAuctionLotResBody = {
-    data: SalvatoAuctionLot[]
-  }
-
-
-async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoTokenResBody> {
+async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoToken> {
     const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -111,11 +17,11 @@ async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoTokenResBody> {
         throw new Error(`Salvato API failed: ${response.status}`)
     }
 
-    const data = (await response.json()) as SalvatoTokenResBody
+    const data = (await response.json()) as SalvatoToken
     return data
 }
 
-async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promise<SalvatoAuctionResBody> {
+async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promise<AuctionData> {
     const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
@@ -128,12 +34,12 @@ async function fetchSalvatoAuctionList(apiUrl: string, apiToken: string): Promis
         throw new Error(`Salvato API failed: ${response.status}`)
     }
 
-    const data = (await response.json()) as SalvatoAuctionResBody
+    const data = (await response.json()) as AuctionData
     return data
 }
 
-async function fetchSalvatoAuctionLotList(apiUrl: string, apiToken: string): Promise<SalvatoAuctionLotResBody> {
-    let allLots: SalvatoAuctionLot[] = []
+async function fetchSalvatoAuctionLotList(apiUrl: string, apiToken: string): Promise<AuctionStock[]> {
+    let allLots: AuctionStock[] = []
     let offset = 0
     let hasMore = true
     const limit = 10 // Assuming API default or max limit
@@ -152,52 +58,53 @@ async function fetchSalvatoAuctionLotList(apiUrl: string, apiToken: string): Pro
         }
 
         const data = (await response.json())
-        allLots.push(...data.data as SalvatoAuctionLot[])
+        allLots.push(...data.data as AuctionStock[])
         offset += limit
         hasMore = data.pagination.total > allLots.length
     }
 
-    return {
-        data: allLots as SalvatoAuctionLot[],
-    }
+    return allLots as AuctionStock[]
 }
 
-async function transformAuctionList(auctionList: SalvatoAuctionLot[]): Promise<PlumsailAuctionVehicleRequest> {
-    const vehicles: PlumsailAuctionVehicleObject[] = auctionList.map(lot => ({
-        lotId: lot.id,
+async function transformAuctionList(auctionList: AuctionStock[]): Promise<FormattedAuctionData> {
+    const vehicles: FormattedAuctionStock[] = auctionList.map(lot => ({
+        id: lot.id,
         make: lot.make,
         model: lot.model,
         year: lot.year,
-        urlLink: lot.lotUrl,
+        city: lot.city,
+        state: lot.state,
+        odometerReading: lot.odometerReading,
+        startCode: lot.startCode,
+        hasKeys: lot.hasKeys,
+        thumbnailUrl: lot.lotImagesDetails.lotImages[0].link[0].url,
     }))
 
     const startDate = auctionList.length > 0 ? auctionList[0]!.startDate : '';
     const endDate = auctionList.length > 0 ? auctionList[0]!.endDate : '';
 
-    const payload: PlumsailAuctionVehicleRequest = {
-        vehicle: vehicles,
-        auctionStartDate: startDate,
-        auctionEndDate: endDate,
+    const payload: FormattedAuctionData = {
+        data: vehicles,
+        startDate: startDate,
+        endDate: endDate,
     }
 
     return payload
 }
-
-
 
 export default async function handler(request: Request): Promise<Response> {
   try {
     const token = await fetchSalvatoToken(`${process.env.SALVATO_PRODUCTION_URL}/auth/token`)
     const auctionList = await fetchSalvatoAuctionList(`${process.env.SALVATO_PRODUCTION_URL}/auctions`, token.token)
     
-    const lotsByAuction = new Map<string, SalvatoAuctionLot[]>();
+    const lotsByAuction = new Map<string, AuctionStock[]>();
     for (const auction of auctionList.data) {
         if (auction.status === 'COMING_SOON') {
             const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_PRODUCTION_URL}/auctions/${auction.auctionId}/lots`, token.token)
-            lotsByAuction.set(String(auction.auctionId), auctionLotList.data)
+            lotsByAuction.set(String(auction.auctionId), auctionLotList)
         } else if (auction.status === 'IN_PROGRESS') {
             const auctionLotList = await fetchSalvatoAuctionLotList(`${process.env.SALVATO_PRODUCTION_URL}/auctions/${auction.auctionId}/lots`, token.token)
-            lotsByAuction.set(String(auction.auctionId), auctionLotList.data)
+            lotsByAuction.set(String(auction.auctionId), auctionLotList)
             continue;
         } else if (auction.status === 'COMPLETED') {
             continue;
@@ -206,38 +113,21 @@ export default async function handler(request: Request): Promise<Response> {
         }
     }
 
-    const payloads: PlumsailAuctionVehicleRequest[] = []
+    const payloads: FormattedAuctionData[] = []
     for (const [, lots] of lotsByAuction.entries()) {
         const payload = await transformAuctionList(lots)
         payloads.push(payload)
     }
 
-    // send to Plumsail per auction in parallel
-    const plumsailResponses = await Promise.all(payloads.map(payload =>
-      fetch(`${process.env.PLUMSAIL_API_URL}/processes/ogvoprmt/sgwreaq/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `${process.env.PLUMSAIL_API_KEY}`,
-        },
-        body: JSON.stringify(payload),
-      })
-    ))
-    const firstError = plumsailResponses.find(r => !r.ok)
-    if (firstError) {
-      throw new Error(`Plumsail API failed: ${firstError.status}`)
-    }
-    const plumsailData = await Promise.all(plumsailResponses.map(r => r.json()))
+    // iterate over payloads and build pdf in parallel
+    const pdfs = await Promise.all(payloads.map(payload => createAuctionPdfFromData(payload)))
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: plumsailData,
+        data: pdfs,
       }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      },
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
