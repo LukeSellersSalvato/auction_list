@@ -1,7 +1,7 @@
 import { createAuctionPdfFromData } from "@/functions/auction-pdf-pipe";
 
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs',
 }
 
 async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoToken> {
