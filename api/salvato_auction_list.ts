@@ -1,4 +1,4 @@
-import { createAuctionPdfFromData } from "@/functions/auction-pdf-pipe";
+import { createAuctionPdfFromData } from "../functions/auction-pdf-pipe";
 
 export const config = {
   runtime: 'nodejs',
