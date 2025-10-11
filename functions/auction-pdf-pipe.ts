@@ -122,19 +122,5 @@ export async function createAuctionPdfFromJson(
     return await createAuctionPdfFromData(data, outputPath, templatePath);
 }
 
-// Simple CLI run for quick test
-async function runIfMain(): Promise<void> {
-    if (require.main === module) {
-        const json = path.join(__dirname, 'optimized_auction_data.json');
-        createAuctionPdfFromJson(json)
-            .then(p => console.log(`PDF created: ${p}`))
-            .catch(err => {
-                console.error('Failed to create PDF:', err);
-                process.exitCode = 1;
-            });
-    }
-}
-
-runIfMain().catch(console.error);
 
 
