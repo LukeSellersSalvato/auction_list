@@ -93,10 +93,18 @@ async function transformAuctionList(auctionList: AuctionStock[]): Promise<Format
 }
 
 export default async function handler(request: Request): Promise<Response> {
+
+  console.log('request', request)
+
+  if (request.method !== 'GET') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
+  }
+
   try {
     const token = await fetchSalvatoToken(`${process.env.SALVATO_PRODUCTION_URL}/auth/token`)
+    console.log('token', token)
     const auctionList = await fetchSalvatoAuctionList(`${process.env.SALVATO_PRODUCTION_URL}/auctions`, token.token)
-    
+    console.log('auctionList', auctionList)
     const lotsByAuction = new Map<string, AuctionStock[]>();
     for (const auction of auctionList.data) {
         if (auction.status === 'COMING_SOON') {
