@@ -1,17 +1,24 @@
+/// <reference path="../types/types.d.ts" />
+
 import puppeteer from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // 1) Load HTML template
 export function loadTemplate(templatePath?: string): string {
-    const filePath = templatePath || path.join(__dirname, 'auction_list_enhanced.html');
+    const filePath = templatePath || path.join(__dirname, 'templates/auction_list_template.html');
     return fs.readFileSync(filePath, 'utf-8');
 }
 
 // 2) Inject data into template (server-side rendering of rows)
 export function renderHtml(templateHtml: string, auctionData: FormattedAuctionData): string {
     // Build table rows HTML
-    const rowsHtml = auctionData.data.map((item, index) => {
+    const rowsHtml = auctionData.data.map((item: FormattedAuctionStock, index: number) => {
         const imageUrl = item.thumbnailUrl || 'https://res.cloudinary.com/drydbxfl8/image/upload/v1758651858/Salvato_Auctions_Logo_Full_Color_Dark_dyltjs.png';
         const keysDisplay = item.hasKeys === 'YES' ? 'Yes' : 'No';
         const mileageDisplay = typeof item.odometerReading === 'number' ? item.odometerReading.toLocaleString() : 'N/A';
@@ -53,6 +60,30 @@ export function renderHtml(templateHtml: string, auctionData: FormattedAuctionDa
 
     let rendered = templateHtml.slice(0, afterOpenIdx) + `\n${rowsHtml}\n` + templateHtml.slice(endIdx);
 
+    // Format dates for display
+    const formatDate = (dateString: string): string => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleString('en-US', { 
+            month: 'numeric', 
+            day: 'numeric', 
+            year: 'numeric', 
+            hour: 'numeric', 
+            minute: '2-digit', 
+            hour12: true 
+        });
+    };
+
+    const startDateFormatted = formatDate(auctionData.startDate);
+    const endDateFormatted = formatDate(auctionData.endDate);
+    const dateRange = `${startDateFormatted} - ${endDateFormatted}`;
+
+    // Replace the auction dates
+    rendered = rendered.replace(
+        /<p class="text-lg" id="auction-dates">[\s\S]*?<\/p>/,
+        `<p class="text-lg" id="auction-dates">\n                ${dateRange}\n            </p>`
+    );
+
     // Remove the inline script block at the end (client-side population) to avoid duplication
     // Keep the Tailwind CDN <script src=...> in <head> intact
     rendered = rendered.replace(/<script>[\s\S]*?<\/script>\s*<\/body>/, '</body>');
@@ -63,7 +94,14 @@ export function renderHtml(templateHtml: string, auctionData: FormattedAuctionDa
 
 // 3) Generate A3 PDF from HTML
 export async function generateA3PdfFromHtml(html: string, outputPath: string): Promise<void> {
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const browser = await puppeteer.launch({ 
+        headless: true, 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        // Force the browser process to disconnect immediately when closed
+        handleSIGINT: false,
+        handleSIGTERM: false,
+        handleSIGHUP: false
+    });
     const page = await browser.newPage();
     try {
         await page.setContent(html, { waitUntil: 'load' });
@@ -96,6 +134,11 @@ export async function generateA3PdfFromHtml(html: string, outputPath: string): P
     } finally {
         await page.close();
         await browser.close();
+        // Force disconnect the browser process to prevent hanging in dev environments
+        const browserProcess = browser.process();
+        if (browserProcess && !browserProcess.killed) {
+            browserProcess.kill('SIGKILL');
+        }
     }
 }
 

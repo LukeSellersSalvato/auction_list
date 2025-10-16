@@ -1,7 +1,12 @@
+/// <reference path="../types/types.d.ts" />
+
 import { createAuctionPdfFromData } from "../functions/auction-pdf-pipe.js";
+import { uploadPdfsToDropbox } from "../functions/dropbox-uploader.js";
+import * as fs from 'fs';
 
 export const config = {
   runtime: 'nodejs',
+  maxDuration: 60,
 }
 
 async function fetchSalvatoToken(apiUrl: string): Promise<SalvatoToken> {
@@ -94,17 +99,13 @@ async function transformAuctionList(auctionList: AuctionStock[]): Promise<Format
 
 export default async function handler(request: Request): Promise<Response> {
 
-  console.log('request', request)
-
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
 
   try {
     const token = await fetchSalvatoToken(`${process.env.SALVATO_PRODUCTION_URL}/auth/token`)
-    console.log('token', token)
     const auctionList = await fetchSalvatoAuctionList(`${process.env.SALVATO_PRODUCTION_URL}/auctions`, token.token)
-    console.log('auctionList', auctionList)
     const lotsByAuction = new Map<string, AuctionStock[]>();
     for (const auction of auctionList.data) {
         if (auction.status === 'COMING_SOON') {
@@ -128,12 +129,35 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     // iterate over payloads and build pdf in parallel
-    const pdfs = await Promise.all(payloads.map(payload => createAuctionPdfFromData(payload)))
+    const pdfPaths = await Promise.all(payloads.map(payload => createAuctionPdfFromData(payload, undefined, './templates/auction_list_template.html')))
+
+    // Upload PDFs to Dropbox
+    const dropboxAccessToken = process.env.DROPBOX_ACCESS_TOKEN;
+    if (!dropboxAccessToken) {
+      throw new Error('DROPBOX_ACCESS_TOKEN environment variable is not set');
+    }
+
+    const dropboxFolder = process.env.DROPBOX_FOLDER || '/Salvato/Auction Lists';
+    const uploadResults = await uploadPdfsToDropbox(pdfPaths, dropboxFolder, dropboxAccessToken);
+
+    // Clean up local PDF files
+    pdfPaths.forEach(pdfPath => {
+      try {
+        fs.unlinkSync(pdfPath);
+      } catch (error) {
+        console.error(`Failed to delete ${pdfPath}:`, error);
+      }
+    });
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: pdfs,
+        pdfCount: uploadResults.length,
+        pdfs: uploadResults.map(result => ({
+          name: result.name,
+          path: result.path,
+          downloadUrl: result.sharedLink,
+        })),
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )

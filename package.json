@@ -11,6 +11,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "puppeteer": "^24.23.0"
+    "puppeteer": "^24.23.0",
+    "dropbox": "^10.34.0"
   }
 }

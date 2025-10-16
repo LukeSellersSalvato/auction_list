@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salvato Auctions - Auction List</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .logo-v { color: #22c55e; }
+        
+        /* PDF-specific styles */
+        @media print {
+            body { 
+                margin: 0; 
+                padding: 0;
+                font-size: 10px;
+            }
+            
+            /* Page break controls */
+            .page-break-before {
+                page-break-before: always;
+            }
+            
+            .page-break-after {
+                page-break-after: always;
+            }
+            
+            .avoid-break {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            
+            /* Table styling for PDF */
+            .auction-table {
+                table-layout: fixed;
+                width: 100%;
+                border-collapse: collapse;
+            }
+            
+            /* Specific column widths for PDF */
+            .col-image { width: 12%; }
+            .col-stock { width: 8%; }
+            .col-year { width: 6%; }
+            .col-make { width: 10%; }
+            .col-model { width: 12%; }
+            .col-mileage { width: 8%; }
+            .col-city { width: 10%; }
+            .col-state { width: 6%; }
+            .col-keys { width: 6%; }
+            .col-start-code { width: 22%; }
+            
+            /* Text wrapping and overflow */
+            .auction-table td, .auction-table th {
+                word-wrap: break-word;
+                word-break: break-word;
+                white-space: normal;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                padding: 4px 6px;
+                font-size: 9px;
+            }
+            
+            /* Image sizing for PDF */
+            .auction-table img {
+                max-width: 100%;
+                max-height: 40px;
+                object-fit: cover;
+            }
+            
+            /* Header styling */
+            .header-section {
+                page-break-after: avoid;
+                margin-bottom: 20px;
+            }
+            
+            /* Table container */
+            .table-container {
+                page-break-inside: auto; /* allow table to begin on page 1 and flow */
+            }
+
+            /* Ensure table header repeats on each page */
+            thead { display: table-header-group; }
+            tfoot { display: table-footer-group; }
+        }
+        
+        /* Screen styles (for preview) */
+        @media screen {
+            .auction-table {
+                table-layout: fixed;
+                width: 100%;
+            }
+            .col-image { width: 140px; }
+            .col-stock { width: 100px; }
+            .col-year { width: 80px; }
+            .col-make { width: 120px; }
+            .col-model { width: 120px; }
+            .col-mileage { width: 88px; }
+            .col-city { width: 120px; }
+            .col-state { width: 70px; }
+            .col-keys { width: 70px; }
+            .col-start-code { width: flex; }
+            
+            .auction-table td, .auction-table th {
+                word-wrap: break-word;
+                word-break: break-word;
+                white-space: normal;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-6xl mx-auto bg-white p-12 shadow-sm">
+        <!-- Header -->
+        <div class="header-section mb-12 mt-12 max-w-sm mx-auto">
+            <img src="https://res.cloudinary.com/drydbxfl8/image/upload/v1758651858/Salvato_Auctions_Logo_Full_Color_Dark_dyltjs.png" alt="Salvato Auctions Logo" class="w-full">
+        </div>
+
+        <!-- Auction Details -->
+        <div class="text-center mb-12 header-section">
+            <h3 class="text-2xl font-semibold mb-4">Auction List</h3>
+            <p class="text-lg" id="auction-dates">
+                9/18/2025 10:00:00 AM - 9/24/2025 10:00:00 AM
+            </p>
+        </div>
+
+        <!-- Auction Table -->
+        <div class="table-container border border-black">
+            <table class="w-full auction-table">
+                <thead>
+                    <tr class="border-b border-black">
+                        <th class="border-r border-black p-3 text-left font-semibold col-image">Image</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-stock">Stock #</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-year">Year</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-make">Make</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-model">Model</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-mileage">Mileage</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-city">City</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-state">State</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-keys">Keys</th>
+                        <th class="border-r border-black p-3 text-left font-semibold col-start-code">Start Code</th>
+                    </tr>
+                </thead>
+                <tbody id="auction-table-body">
+                    <!-- Table rows will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Note: Data extraction function is now in process_auction_data.js
+        // This script processes the large JSON file and creates optimized_auction_data.json
+        
+        let auctionData = [];
+
+        // Function to populate the table with page break logic
+        function populateTable() {
+            const tableBody = document.getElementById('auction-table-body');
+            const itemsPerPage = 15; // Adjust based on your needs
+            
+            auctionData.forEach((item, index) => {
+                const row = document.createElement('tr');
+                
+                // Add page break class every 15 rows (adjust as needed)
+                if (index > 0 && index % itemsPerPage === 0) {
+                    row.className = 'page-break-before avoid-break';
+                } else {
+                    row.className = 'avoid-break';
+                }
+                
+                // Add border for non-last items
+                if (index < auctionData.length - 1) {
+                    row.className += ' border-b border-black';
+                }
+                
+                // Use the pre-extracted thumbnail URL or fallback to placeholder
+                const imageUrl = item.thumbnailUrl || "https://res.cloudinary.com/drydbxfl8/image/upload/v1758651858/Salvato_Auctions_Logo_Full_Color_Dark_dyltjs.png";
+                
+                // Format keys display
+                const keysDisplay = item.hasKeys === "YES" ? "Yes" : "No";
+                
+                // Format mileage with commas
+                const mileageDisplay = item.odometerReading ? item.odometerReading.toLocaleString() : "N/A";
+                
+                // Truncate long start codes for better display
+                const startCodeDisplay = item.startCode && item.startCode.length > 20 
+                    ? item.startCode.substring(0, 17) + "..." 
+                    : item.startCode;
+                
+                row.innerHTML = `
+                    <td class="border-r border-black p-3 col-image"><img src="${imageUrl}" alt="${item.make} ${item.model}" class="max-w-full max-h-20 object-cover"></td>
+                    <td class="border-r border-black p-3 text-blue-600 hover:text-blue-800 underline col-stock"><a href="https://salvatoauctions.com/vehicle-details/${item.id}" target="_blank" rel="noopener noreferrer">${item.id}</a></td>
+                    <td class="border-r border-black p-3 col-year">${item.year}</td>
+                    <td class="border-r border-black p-3 col-make">${item.make}</td>
+                    <td class="border-r border-black p-3 col-model">${item.model}</td>
+                    <td class="border-r border-black p-3 col-mileage">${mileageDisplay}</td>
+                    <td class="border-r border-black p-3 col-city">${item.city}</td>
+                    <td class="border-r border-black p-3 col-state">${item.state}</td>
+                    <td class="border-r border-black p-3 col-keys">${keysDisplay}</td>
+                    <td class="border-r border-black p-3 col-start-code">${startCodeDisplay}</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Function to load auction data from JSON
+        function loadAuctionData(jsonData) {
+            if (jsonData && jsonData.data) {
+                auctionData = jsonData.data;
+                populateTable();
+            } else {
+                console.error('Invalid JSON data structure');
+            }
+        }
+
+        // Mock data from optimized_auction_data.json
+        const mockAuctionData = {
+            "data": [
+                {
+                    "id": 669,
+                    "make": "Hyundai",
+                    "model": "Elantra",
+                    "year": 2021,
+                    "city": "Houston",
+                    "state": "TX",
+                    "odometerReading": 51000,
+                    "startCode": "STATIONARY",
+                    "hasKeys": "NO",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/669/exteriorFrontCenterImage|320x240|1749070139731.jpg"
+                },
+                {
+                    "id": 726,
+                    "make": "Chevrolet",
+                    "model": "Sonic",
+                    "year": 2016,
+                    "city": "Edinburg",
+                    "state": "TX",
+                    "odometerReading": 145848,
+                    "startCode": "STATIONARY",
+                    "hasKeys": "NO",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/726/exteriorFrontCenterImage|320x240|1752077802081.jpg"
+                },
+                {
+                    "id": 737,
+                    "make": "Chevrolet",
+                    "model": "Corvette",
+                    "year": 2006,
+                    "city": "Houston",
+                    "state": "TX",
+                    "odometerReading": 68340,
+                    "startCode": "RUNS_AND_DRIVES",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/737/exteriorFrontCenterImage|320x240|1752858635405.jpg"
+                },
+                {
+                    "id": 657,
+                    "make": "BMW",
+                    "model": "320i",
+                    "year": 2015,
+                    "city": "Edinburg",
+                    "state": "TX",
+                    "odometerReading": 121522,
+                    "startCode": "STATIONARY",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/657/exteriorFrontCenterImage|320x240|1748975096811.jpg"
+                },
+                {
+                    "id": 652,
+                    "make": "Nissan",
+                    "model": "Altima",
+                    "year": 2016,
+                    "city": "Grand Prairie",
+                    "state": "TX",
+                    "odometerReading": 136105,
+                    "startCode": "STATIONARY",
+                    "hasKeys": "NO",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/652/exteriorFrontCenterImage|320x240|1750902378140.jpg"
+                },
+                {
+                    "id": 640,
+                    "make": "Volkswagen",
+                    "model": "Beetle",
+                    "year": 2019,
+                    "city": "Houston",
+                    "state": "TX",
+                    "odometerReading": 14992,
+                    "startCode": "STARTS",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/640/exteriorFrontCenterImage|320x240|1747758597292.jpg"
+                },
+                {
+                    "id": 733,
+                    "make": "Chevrolet",
+                    "model": "Malibu",
+                    "year": 2010,
+                    "city": "Houston",
+                    "state": "TX",
+                    "odometerReading": null,
+                    "startCode": "STATIONARY",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/733/exteriorFrontCenterImage|320x240|1752783191981.jpg"
+                },
+                {
+                    "id": 692,
+                    "make": "Chevrolet",
+                    "model": "Silverado 1500",
+                    "year": 2021,
+                    "city": "Arlington",
+                    "state": "TX",
+                    "odometerReading": 39052,
+                    "startCode": "STARTS",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/692/exteriorFrontCenterImage|320x240|1749755779984.jpg"
+                },
+                {
+                    "id": 747,
+                    "make": "Ford",
+                    "model": "F-150",
+                    "year": 2008,
+                    "city": "Arlington",
+                    "state": "TX",
+                    "odometerReading": 193029,
+                    "startCode": "RUNS_AND_DRIVES",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/747/exteriorFrontCenterImage|320x240|1754326312602.jpg"
+                },
+                {
+                    "id": 717,
+                    "make": "Nissan",
+                    "model": "Altima",
+                    "year": 2014,
+                    "city": "Arlington",
+                    "state": "TX",
+                    "odometerReading": 207374,
+                    "startCode": "RUNS_AND_DRIVES",
+                    "hasKeys": "YES",
+                    "thumbnailUrl": "https://dx3tudvmyb35h.cloudfront.net/reports/717/exteriorFrontCenterImage|320x240|1751384644392.jpg"
+                }
+            ]
+        };
+
+        // Populate the table when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load the mock auction data
+            loadAuctionData(mockAuctionData);
+        });
+    </script>
+</body>
+</html>
